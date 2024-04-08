@@ -7,18 +7,12 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 	"github.com/rovilay/auth-service/models"
 	"github.com/rovilay/auth-service/repository"
 	"github.com/rovilay/auth-service/utils"
 	"github.com/rs/zerolog"
 )
-
-type LoginInput struct {
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required,min=7"`
-}
 
 type UserHandler struct {
 	repo repository.UserRepository
@@ -86,7 +80,7 @@ func (h *UserHandler) Signup(w http.ResponseWriter, r *http.Request) {
 func (h *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 	log := h.log.With().Str("handler", "Login").Logger()
 
-	var input LoginInput
+	var input models.LoginInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		h.sendError(w, err, "failed to read payload", http.StatusBadRequest, &log)
 		return
@@ -98,8 +92,13 @@ func (h *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user, err := h.repo.GetUserByIDorEmail(r.Context(), input.Email)
-	if err != nil || !utils.CheckPasswordHash(input.Password, user.Password) {
-		h.sendError(w, err, "invalid email or password", http.StatusUnauthorized, &log)
+	fmt.Println(user.Password, input.Password, !utils.CheckPasswordHash(input.Password, user.Password))
+	if err != nil {
+		h.sendError(w, err, "", http.StatusUnauthorized, &log)
+		return
+	}
+	if !utils.CheckPasswordHash(input.Password, user.Password) {
+		h.sendError(w, errors.New("invalid email or password"), "", http.StatusUnauthorized, &log)
 		return
 	}
 
@@ -123,8 +122,7 @@ func (h *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	log := h.log.With().Str("handler", "GetUser").Logger()
-
-	userID := chi.URLParam(r, "id")
+	userID := r.Context().Value(userIDKey).(string)
 
 	user, err := h.repo.GetUserByIDorEmail(r.Context(), userID)
 	if err != nil {
@@ -132,7 +130,116 @@ func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = user.ToJSON(w); err != nil {
+	res := &models.UserResponse{
+		ID:        user.ID,
+		Firstname: user.Firstname,
+		Lastname:  user.Lastname,
+		Username:  user.Username,
+		Email:     user.Email,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+	}
+
+	if err = json.NewEncoder(w).Encode(res); err != nil {
+		h.sendError(w, err, "failed to marshal response", 0, &log)
+		return
+	}
+}
+
+func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	log := h.log.With().Str("handler", "UpdateUser").Logger()
+	userID := r.Context().Value(userIDKey).(string)
+
+	var input models.UpdateUserInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		h.sendError(w, err, "failed to read payload", http.StatusBadRequest, &log)
+		return
+	}
+
+	if err := validate.Struct(input); err != nil {
+		h.sendError(w, err, "", http.StatusBadRequest, &log)
+		return
+	}
+
+	user, err := h.repo.GetUserByIDorEmail(r.Context(), userID)
+	if err != nil {
+		h.sendError(w, err, "", 0, &log)
+		return
+	}
+	if input.Firstname != "" {
+		user.Firstname = input.Firstname
+	}
+	if input.Lastname != "" {
+		user.Lastname = input.Lastname
+	}
+	if input.Username != "" {
+		user.Username = input.Username
+	}
+	if input.Email != "" {
+		user.Email = input.Email
+	}
+
+	err = h.repo.UpdateUser(r.Context(), user)
+	if err != nil {
+		h.sendError(w, err, "", 0, &log)
+		return
+	}
+
+	res := &models.UserResponse{
+		ID:        user.ID,
+		Firstname: user.Firstname,
+		Lastname:  user.Lastname,
+		Username:  user.Username,
+		Email:     user.Email,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+	}
+
+	if err = json.NewEncoder(w).Encode(res); err != nil {
+		h.sendError(w, err, "failed to marshal response", 0, &log)
+		return
+	}
+}
+
+func (h *UserHandler) UpdatePassword(w http.ResponseWriter, r *http.Request) {
+	log := h.log.With().Str("handler", "UpdateUser").Logger()
+	userID := r.Context().Value(userIDKey).(string)
+
+	var input models.UpdatePasswordInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		h.sendError(w, err, "failed to read payload", http.StatusBadRequest, &log)
+		return
+	}
+
+	if err := validate.Struct(input); err != nil {
+		h.sendError(w, err, "", http.StatusBadRequest, &log)
+		return
+	}
+
+	user, err := h.repo.GetUserByIDorEmail(r.Context(), userID)
+	if err != nil {
+		h.sendError(w, err, "", 0, &log)
+		return
+	}
+
+	if !utils.CheckPasswordHash(input.Password, user.Password) {
+		h.sendError(w, errors.New("invalid password"), "", http.StatusBadRequest, &log)
+		return
+	}
+
+	_, err = h.repo.UpdatePassword(r.Context(), userID, input.NewPassword)
+	if err != nil {
+		h.sendError(w, err, "", 0, &log)
+		return
+	}
+
+	var res struct {
+		Success string `json:"success"`
+	}
+
+	res.Success = "operation successful!"
+
+	if err = json.NewEncoder(w).Encode(res); err != nil {
 		h.sendError(w, err, "failed to marshal response", 0, &log)
 		return
 	}
@@ -149,8 +256,7 @@ func (h *UserHandler) sendError(w http.ResponseWriter, err error, errMsg string,
 	}
 	errRes := fmt.Sprintf(`{"error": "%v"}`, errMsg)
 
-	if errors.Is(err, utils.ErrDuplicateEntry) ||
-		errors.Is(err, utils.ErrForeignKeyViolation) {
+	if errors.Is(err, utils.ErrDuplicateEntry) || errors.Is(err, utils.ErrForeignKeyViolation) {
 		http.Error(w, errRes, http.StatusBadRequest)
 		return
 	} else if errors.Is(err, utils.ErrNotFound) {

@@ -34,7 +34,7 @@ func (a *App) loadRoutes() {
 		w.Write(msg)
 	})
 
-	router.Route("/inventory", a.loadUserRoutes)
+	a.loadUserRoutes(router)
 
 	// CORS configuration
 	corsRouter := cors.Default().Handler(router)
@@ -50,6 +50,8 @@ func (a *App) loadUserRoutes(router chi.Router) {
 
 	router.Group(func(r chi.Router) {
 		r.Use(h.MiddlewareAuth)
-		r.Get("/user/{id}", h.GetUser)
+		r.Get("/users/{id}", h.GetUser)
+		r.Put("/users/{id}", h.UpdateUser)
+		r.Put("/users/{id}/password", h.UpdatePassword)
 	})
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/rovilay/auth-service/utils"
 )
 
@@ -14,15 +15,27 @@ var userIDKey contextKey = "userID"
 
 func (h *UserHandler) MiddlewareAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tokenString := r.Header.Get("Authorization") // Assuming token in "Authorization" header
-		if tokenString == "" {
+		authString := r.Header.Get("Authorization")
+		if authString == "" {
 			ErrUnauthorized(w, utils.ErrMissingAuthToken)
+			return
+		}
+
+		tokenString, err := utils.ExtractToken(authString)
+		if err != nil {
+			ErrUnauthorized(w, err)
 			return
 		}
 
 		userID, err := utils.ValidateJWT(tokenString)
 		if err != nil {
 			ErrUnauthorized(w, err)
+			return
+		}
+
+		paramID := chi.URLParam(r, "id")
+		if paramID != userID {
+			ErrUnauthorized(w, utils.ErrUserUnAuthorized)
 			return
 		}
 

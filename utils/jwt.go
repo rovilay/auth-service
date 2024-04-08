@@ -1,7 +1,9 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -10,6 +12,15 @@ import (
 )
 
 var jwtSecret = []byte(config.Config.JwtSecret)
+
+func ExtractToken(authString string) (string, error) {
+	parts := strings.Split(authString, " ")
+	if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
+		return "", errors.New("invalid authorization header format")
+	}
+
+	return parts[1], nil
+}
 
 func GenerateJWT(userID uuid.UUID) (string, error) {
 	claims := jwt.MapClaims{
@@ -21,7 +32,7 @@ func GenerateJWT(userID uuid.UUID) (string, error) {
 	return token.SignedString(jwtSecret)
 }
 
-func ValidateJWT(tokenString string) (uint, error) {
+func ValidateJWT(tokenString string) (string, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -29,10 +40,14 @@ func ValidateJWT(tokenString string) (uint, error) {
 		return jwtSecret, nil
 	})
 
+	if err != nil {
+		return "", err
+	}
+
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-		userID := uint(claims["user_id"].(float64))
+		userID := claims["user_id"].(string)
 		return userID, nil
 	} else {
-		return 0, err
+		return "", err
 	}
 }
