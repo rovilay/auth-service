@@ -11,8 +11,6 @@ import (
 	"github.com/rovilay/auth-service/config"
 )
 
-var jwtSecret = []byte(config.Config.JwtSecret)
-
 func ExtractToken(authString string) (string, error) {
 	parts := strings.Split(authString, " ")
 	if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
@@ -29,7 +27,7 @@ func GenerateJWT(userID uuid.UUID) (string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(jwtSecret)
+	return token.SignedString([]byte(config.Config.JwtSecret))
 }
 
 func ValidateJWT(tokenString string) (string, error) {
@@ -37,7 +35,7 @@ func ValidateJWT(tokenString string) (string, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return jwtSecret, nil
+		return []byte(config.Config.JwtSecret), nil
 	})
 
 	if err != nil {

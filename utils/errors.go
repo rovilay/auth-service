@@ -8,5 +8,5 @@ var ErrForeignKeyViolation = errors.New("foreign key violation (invalid user ref
 var ErrNotFound = errors.New("user not found")
 var ErrTokenGeneration = errors.New("error generating token")
 var ErrMissingAuthToken = errors.New("missing authorization token")
-var ErrUserUnAuthorized = errors.New("user authorized")
+var ErrUserUnAuthorized = errors.New("user is Unauthorized")
 var ErrSomethingWentWrong = errors.New("something went wrong")

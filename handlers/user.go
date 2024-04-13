@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 	"github.com/rovilay/auth-service/models"
 	"github.com/rovilay/auth-service/repository"
 	"github.com/rovilay/auth-service/utils"
@@ -52,6 +53,7 @@ func (h *UserHandler) Signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user.ID = uuid.New()
 	err = h.repo.CreateUser(r.Context(), user)
 	if err != nil {
 		h.sendError(w, err, "", 0, &log)
@@ -92,7 +94,6 @@ func (h *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user, err := h.repo.GetUserByIDorEmail(r.Context(), input.Email)
-	fmt.Println(user.Password, input.Password, !utils.CheckPasswordHash(input.Password, user.Password))
 	if err != nil {
 		h.sendError(w, err, "", http.StatusUnauthorized, &log)
 		return
